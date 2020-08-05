@@ -1,0 +1,204 @@
+---
+title: "MLM workshop for PICUP"
+author: "Chelsea Helion"
+date: "6/14/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(lme4)
+library(lmerTest)
+library(misty)
+library(Rmisc)
+library(effects)
+library(arm)
+library(sjPlot)
+library(lattice)
+library(RColorBrewer)
+library(ggthemes)
+```
+
+## Load the data as a tibble (a type of data frame)
+
+```{r echo = FALSE}
+picup <- read_csv("/Users/tua37526/Desktop/picupClean2.csv")
+head(picup)
+```
+
+## let's make sure the social reduction variables are correlated with one another (to make sure that combining them is ok) 
+```{r}
+## look at the correlation between reduceSocialSelf1 and reduceSocialSelf2
+cor(picup$reduceSocialSelf1, picup$reduceSocialSelf2, use = "pairwise.complete.obs") 
+## .669, not bad!
+picup$reduceSocialSelfMean <- (picup$reduceSocialSelf1 + picup$reduceSocialSelf2)/2
+```
+
+## cool, that's great! Now let's run a standard linear regression with covidWorry as the predictor variable and reduceSocialSelfMean as the dependent variable
+```{r}
+lm1 <- lm(reduceSocialSelfMean ~ covidWorry, data = picup)
+summary(lm1)
+plot(effect("covidWorry", lm1), grid = TRUE)
+coef(lm1)
+```
+
+```{r}
+## run the model
+mlm1 <- lmer(reduceSocialSelfMean ~ covidWorry + (1|coded_id), data = picup)
+display(mlm1)
+summary(mlm1)
+confint(mlm1, oldNames = FALSE)
+
+## calculate the ICC based on model output
+mlm1_ICC <- (.72)/(.72+.78)
+
+## examine the coefficients
+coef(mlm1)
+fixef(mlm1)
+ranef(mlm1)
+se.fixef(mlm1)
+se.ranef(mlm1)
+
+## plot the data
+plot_model(mlm1, type = "re")
+plot_model(mlm1, type = "pred")
+plot_model(mlm1, type = "slope")
+plot(mlm1)
+
+# fit a subset of the data (just makes it easier to see)
+picup2 <- picup[1:33,]
+mlm2 <- lmer(reduceSocialSelfMean ~ covidWorry + (1|coded_id), data = picup2)
+display(mlm2)
+summary(mlm2)
+
+# create slopes and intercepts variables based on the mlm we ran on the subset
+intercepts <- coef(mlm2)$coded_id[,1]
+slopes <- coef(mlm2)$coded_id[,2]
+
+#plot the model!
+ ggplot(picup2, aes(x=covidWorry, y=reduceSocialSelfMean, color=as.factor(coded_id))) + 
+   geom_point(shape=20) + 
+   geom_abline(intercept = intercepts, slope = slopes)
+
+ ## test the model against the null model
+ 
+ # create the null model
+ null.mlm <- lmer(reduceSocialSelfMean ~ (1|coded_id), data = picup)
+ display(null.mlm)
+ 
+ # test our model against the null model
+ anova(null.mlm, mlm1)
+```
+
+## ok, now let's run a varying slope model
+```{r}
+
+## run the model
+mlm2 <- lmer(covidWorry ~ wave + (1 + wave|coded_id), data = picup)
+display(mlm2)
+summary(mlm2)
+confint(mlm2, oldNames = FALSE)
+
+## examine the coefficients
+coef(mlm2)
+se.fixef(mlm2)
+se.ranef(mlm2)
+
+## plot the data
+plot_model(mlm2, type = "re")
+plot_model(mlm2, type = "pred")
+plot_model(mlm2, type = "slope")
+plot(mlm2)
+
+picup2 <-
+  picup %>% 
+  drop_na(covidWorry)
+
+mlm3 <- lmer(covidWorry ~ wave + (1 + wave|coded_id), data = picup2)
+display(mlm3)
+
+# create slopes and intercepts variables based on the mlm we ran on the subset
+intercepts <- coef(mlm3)$coded_id[,1]
+slopes <- coef(mlm3)$coded_id[,2]
+
+## plot it!
+  nb.cols = 101
+  MLMCols <- colorRampPalette(brewer.pal(9, "Blues"))(nb.cols)
+  picup2$Predictions <- predict(mlm2)
+  ggplot(aes(x = wave, y = Predictions, color = as.factor(coded_id)), data = picup2) +
+    geom_line(size=.5) +
+    geom_point(aes(y = covidWorry)) +
+    geom_abline(slope= -.37, intercept=3.45, lwd= 1.5, col = 'red') +
+    scale_x_continuous("Study Wave",c(0:2)) +
+    xlab("Study Wave") +
+    ylab("COVID-19 related worry") +
+    ggthemes::theme_calc() +
+    scale_color_manual(values = MLMCols) +
+    theme(legend.position = "none")
+  
+## test the model against the null model
+ 
+ # create the null model
+ null.mlm <- lmer(covidWorry ~ (wave|coded_id), data = picup)
+ display(null.mlm)
+ 
+ # test our model against the null model
+ anova(null.mlm, mlm2)
+```
+
+## If we have time, we'll look at interactions
+```{r}
+## run the model
+mlm3 <- lmer(covidWorry ~ wave * age_check + (wave|coded_id), data = picup)
+display(mlm3)
+summary(mlm3)
+confint(mlm3, oldNames = FALSE)
+
+## I go on a small tirade about mean-centering
+picup$age_check_cb <- center(picup$age_check)
+
+## run the model
+mlm4 <- lmer(covidWorry ~ wave *age_check_cb + (wave|coded_id), data = picup)
+display(mlm4)
+summary(mlm4)
+confint(mlm4, oldNames = FALSE)
+
+## I continue talking about how great mean-centering is
+picup$age_check_19 <- (picup$age_check - 19)
+picup$age_check_53 <- (picup$age_check - 53)
+
+## run the model
+mlm5 <- lmer(covidWorry ~ wave *age_check_19 + (wave|coded_id), data = picup)
+display(mlm5)
+mlm6 <- lmer(covidWorry ~ wave *age_check_53 + (wave|coded_id), data = picup)
+display(mlm6)
+
+## plot the data
+plot_model(mlm4, type = "re")
+plot_model(mlm4, type = "pred")
+plot(effect("wave:age_check", mlm3), grid = TRUE)
+
+## examine the coefficients
+coef(mlm3)
+se.fixef(mlm3)
+se.ranef(mlm3)
+
+## examine the coefficients
+coef(mlm4)
+se.fixef(mlm4)
+se.ranef(mlm4)
+
+
+## test the model against the null model
+ 
+ # create the null model
+ null.mlm <- lmer(covidWorry ~ wave + age_check_cb + (wave|coded_id), data = picup)
+ display(null.mlm)
+ summary(null.mlm)
+ 
+ # test our model against the null model
+ anova(null.mlm, mlm4)
+
+
+```
