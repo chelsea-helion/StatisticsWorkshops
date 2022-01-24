@@ -14,7 +14,7 @@ library(misty)
 library(Rmisc)
 library(effects)
 library(arm)
-library(sjPlot)
+#library(sjPlot)
 library(lattice)
 library(RColorBrewer)
 library(ggthemes)
@@ -23,7 +23,7 @@ library(ggthemes)
 ## Load the data as a tibble (a type of data frame)
 
 ```{r echo = FALSE}
-picup <- read_csv("/Users/tua37526/Desktop/picupClean2.csv")
+picup <- read_csv("/Users/tua37526/Documents/GitHub/StatisticsWorkshops/Multilevel-Modeling/picupClean2.csv")
 head(picup)
 ```
 
